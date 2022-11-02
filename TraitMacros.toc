@@ -1,0 +1,5 @@
+## Interface: 100000
+## Title: TraitMacros
+## Dependencies:
+## OptionalDeps:
+code.lua
