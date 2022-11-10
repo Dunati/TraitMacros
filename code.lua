@@ -3,16 +3,20 @@ local TraitMacros = CreateFrame("Frame")
 local EventHandlers = {}
 local deferred = false
 local inCombat = InCombatLockdown()
+local inChallengeMode = C_ChallengeMode.IsChallengeModeActive()
 local inUpdate = false
 local timer
 
 TraitMacros:SetScript("OnEvent", function(self, event, ...)
-    EventHandlers[event](self, event, arg)
+    EventHandlers[event](self, event, ...)
 end)
-
 
 local function HasTrait(node_id, entry, ranks, active_config)
     local node_info = C_Traits.GetNodeInfo(active_config, node_id)
+    if not node_info then
+        print("TraitMacros: cannot find node with id "..tostring(node_id))
+        return false
+    end
     if ranks:len() == 0 then
         ranks = 1
     else
@@ -34,7 +38,7 @@ end
 local function UpdateMacro(i, active_config)
     local name, icon, body = GetMacroInfo(i)
     local original = body
-    for no, negate, node, separator, entry, separator2, ranks in (original:gmatch("(%a*)talent:(!?)(%d+)(/?)(%d*)(/?)(%d*)")) do
+    for start,no, negate, node, separator, entry, separator2, ranks in (original:gmatch("()(%a*)talent:(!?)(%d+)(/?)(%d*)(/?)(%d*)")) do
         local node_id = tonumber(node)
         local invert = negate == '!'
         local talent = "talent:"
@@ -44,15 +48,15 @@ local function UpdateMacro(i, active_config)
         end
         
         local s = no .. "talent:" .. negate .. node .. separator .. entry .. separator2 .. ranks
-        
         local r = talent .. negate .. node .. separator .. entry .. separator2 .. ranks
-        
-        body = body:gsub(s, r, 1)
+        if s ~= r then
+            body = body:sub(1,start-1)..body:sub(start):gsub(s, r, 1)
+        end
     end
     
     if body ~= original then
         if body:len() > 255 then
-            print("Macro", name, "length would exceed 255 characters")
+            print("TraitMacros:  Macro", name, "length would exceed 255 characters")
         else
             EditMacro(i, nil, nil, body, 1, nil)
         end
@@ -62,7 +66,8 @@ end
 local function UpdateTraitMacros(...)
     if inUpdate then return end
     inCombat = InCombatLockdown()
-    if inCombat or C_ChallengeMode.IsChallengeModeActive() then
+    inChallengeMode = C_ChallengeMode.IsChallengeModeActive()
+    if inCombat or inChallengeMode then
         deferred = true
         return
     end
@@ -101,10 +106,14 @@ EventHandlers["CHALLENGE_MODE_RESET"] = QueueUpdate
 EventHandlers["PLAYER_REGEN_DISABLED"] = function()
     inCombat = true
 end
+EventHandlers["CHALLENGE_MODE_START"] = function()
+    inChallengeMode = true
+end
 
 EventHandlers["PLAYER_REGEN_ENABLED"] = function()
-    inCombat = InCombatLockdown() or C_ChallengeMode.IsChallengeModeActive()
-    if not incombat and deferred then
+    inCombat = InCombatLockdown()
+    inChallengeMode = C_ChallengeMode.IsChallengeModeActive()
+    if not (incombat or inChallengeMode) and deferred then
         QueueUpdate()
     end
 end
@@ -116,3 +125,8 @@ end
 for k in pairs(EventHandlers) do
     TraitMacros:RegisterEvent(k)
 end
+
+
+--[[
+DevTools_Dump
+]]
